@@ -35,7 +35,7 @@ func parseIPv6(addr [16]win.UCHAR) string {
 // TCPStatuses https://msdn.microsoft.com/en-us/library/windows/desktop/bb485761(v=vs.85).aspx
 var TCPStatuses = map[win.MIB_TCP_STATE]string{
 	1:  "CLOSED",
-	2:  "LISTENING",
+	2:  "LISTEN",
 	3:  "SYN_SENT",
 	4:  "SYN_RECEIVED",
 	5:  "ESTABLISHED",

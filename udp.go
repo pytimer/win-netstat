@@ -75,6 +75,7 @@ func getUDP4Stat() ([]NetStat, error) {
 		index := int(unsafe.Sizeof(pmibtable2.DwNumEntries))
 		step := int(unsafe.Sizeof(pmibtable2.Table))
 
+		// udp no state, so set default state LISTEN
 		for i := 0; i < int(pmibtable2.DwNumEntries); i++ {
 			mibs := (*MIB_UDPROW_OWNER_PID)(unsafe.Pointer(&buf[index]))
 
@@ -82,6 +83,7 @@ func getUDP4Stat() ([]NetStat, error) {
 				LocalAddr: parseIPv4(mibs.DwLocalAddr),
 				LocalPort: decodePort(mibs.DwLocalPort),
 				OwningPid: int(mibs.DwOwningPid),
+				State:     TCPStatuses[2],
 			}
 			stats = append(stats, ns)
 
@@ -129,7 +131,7 @@ func getUDP6Stat() ([]NetStat, error) {
 		stats := make([]NetStat, 0)
 		index := int(unsafe.Sizeof(pmibtable2.DwNumEntries))
 		step := int(unsafe.Sizeof(pmibtable2.Table))
-
+		// udp no state, so set default state LISTEN
 		for i := 0; i < int(pmibtable2.DwNumEntries); i++ {
 
 			mibs := (*MIB_UDP6ROW_OWNER_PID)(unsafe.Pointer(&buf[index]))
@@ -137,6 +139,7 @@ func getUDP6Stat() ([]NetStat, error) {
 				LocalAddr: parseIPv6(mibs.UcLocalAddr),
 				LocalPort: decodePort(mibs.DwLocalPort),
 				OwningPid: int(mibs.DwOwningPid),
+				State:     TCPStatuses[2],
 			}
 			stats = append(stats, ns)
 
