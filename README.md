@@ -1,6 +1,8 @@
 win-netstat
 ================
 
+[![GoDoc](https://godoc.org/github.com/pytimer/win-netstat?status.svg)](https://godoc.org/github.com/pytimer/win-netstat)
+
 windows netstat implementation in Golang.
 
 ## Getting Started
