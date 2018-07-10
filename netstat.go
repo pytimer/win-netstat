@@ -119,6 +119,4 @@ func getNetStatWithKindFile(filename string) ([]NetStat, error) {
 	default:
 		return nil, fmt.Errorf("invalid kind filename: %s", filename)
 	}
-
-	return nil, nil
 }

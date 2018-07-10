@@ -6,22 +6,17 @@ import (
 	"fmt"
 	"net"
 	"syscall"
-
-	"github.com/kbinani/win"
 )
 
-// ErrInsufficientBuffer windows api ERROR_INSUFFICIENT_BUFFER
-const ErrInsufficientBuffer = 122
-
-func decodePort(port win.DWORD) uint16 {
+func decodePort(port uint32) uint16 {
 	return syscall.Ntohs(uint16(port))
 }
 
-func parseIPv4(addr win.DWORD) string {
+func parseIPv4(addr uint32) string {
 	return fmt.Sprintf("%d.%d.%d.%d", addr&255, addr>>8&255, addr>>16&255, addr>>24&255)
 }
 
-func parseIPv6(addr [16]win.UCHAR) string {
+func parseIPv6(addr [16]byte) string {
 	var ret [16]byte
 	for i := 0; i < 16; i++ {
 		ret[i] = uint8(addr[i])
@@ -33,7 +28,7 @@ func parseIPv6(addr [16]win.UCHAR) string {
 }
 
 // TCPStatuses https://msdn.microsoft.com/en-us/library/windows/desktop/bb485761(v=vs.85).aspx
-var TCPStatuses = map[win.MIB_TCP_STATE]string{
+var TCPStatuses = map[MIB_TCP_STATE]string{
 	1:  "CLOSED",
 	2:  "LISTEN",
 	3:  "SYN_SENT",

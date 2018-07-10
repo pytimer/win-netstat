@@ -3,150 +3,114 @@
 package winnetstat
 
 import (
-	"fmt"
 	"syscall"
 	"unsafe"
 
-	"github.com/kbinani/win"
+	"golang.org/x/sys/windows"
 )
 
-// https://msdn.microsoft.com/en-us/library/windows/desktop/aa365930(v=vs.85).aspx
-type MIB_UDPROW_OWNER_PID struct {
-	DwLocalAddr win.DWORD
-	DwLocalPort win.DWORD
-	DwOwningPid win.DWORD
-}
-
-type MIB_UDPTABLE_OWNER_PID struct {
-	DwNumEntries win.DWORD
-	Table        [win.ANY_SIZE]MIB_UDPROW_OWNER_PID
-}
-
-type PMIB_UDPTABLE_OWNER_PID *MIB_UDPTABLE_OWNER_PID
-
-type MIB_UDP6ROW_OWNER_PID struct {
-	UcLocalAddr    [16]win.UCHAR
-	DwLocalScopeId win.DWORD
-	DwLocalPort    win.DWORD
-	DwOwningPid    win.DWORD
-}
-
-type MIB_UDP6TABLE_OWNER_PID struct {
-	DwNumEntries win.DWORD
-	Table        [win.ANY_SIZE]MIB_UDP6ROW_OWNER_PID
-}
-
-type PMIB_UDP6TABLE_OWNER_PID *MIB_UDP6TABLE_OWNER_PID
-
 func getUDP4Stat() ([]NetStat, error) {
-	var pmibtable2 PMIB_UDPTABLE_OWNER_PID
-	var mibtable2 MIB_UDPTABLE_OWNER_PID
-
-	size := unsafe.Sizeof(mibtable2)
-	pmibtable2 = &mibtable2
-
-	// first call to GetExtendedUdpTable to get the necessary size into the size variable
-	ret := win.GetExtendedUdpTable(
-		uintptr(unsafe.Pointer(pmibtable2)),
-		(*win.DWORD)(unsafe.Pointer(&size)),
-		true,
-		win.AF_INET,
-		win.UDP_TABLE_OWNER_PID,
-		0,
+	var (
+		pmibtable2 PMIB_UDPTABLE_OWNER_PID
+		size       uint32
+		buf        []byte
 	)
-	if ret == ErrInsufficientBuffer {
-		buf := make([]byte, size)
-		pmibtable2 = (*MIB_UDPTABLE_OWNER_PID)(unsafe.Pointer(&buf[0]))
 
-		// second call to GetExtendedUdpTable to get the actual data we require
-		dwRet := win.GetExtendedUdpTable(
+	for {
+		if len(buf) > 0 {
+			pmibtable2 = (*MIB_UDPTABLE_OWNER_PID)(unsafe.Pointer(&buf[0]))
+		}
+		err := GetExtendedUdpTable(
 			uintptr(unsafe.Pointer(pmibtable2)),
-			(*win.DWORD)(unsafe.Pointer(&size)),
+			&size,
 			true,
 			syscall.AF_INET,
-			win.UDP_TABLE_OWNER_PID,
+			UDP_TABLE_OWNER_PID,
 			0,
 		)
-		if int(dwRet) != 0 {
-			return nil, fmt.Errorf("run GetExtendedUdpTable error")
+		if err == nil {
+			break
 		}
-
-		stats := make([]NetStat, 0)
-		index := int(unsafe.Sizeof(pmibtable2.DwNumEntries))
-		step := int(unsafe.Sizeof(pmibtable2.Table))
-
-		// udp no state, so set default state LISTEN
-		for i := 0; i < int(pmibtable2.DwNumEntries); i++ {
-			mibs := (*MIB_UDPROW_OWNER_PID)(unsafe.Pointer(&buf[index]))
-
-			ns := NetStat{
-				LocalAddr: parseIPv4(mibs.DwLocalAddr),
-				LocalPort: decodePort(mibs.DwLocalPort),
-				OwningPid: int(mibs.DwOwningPid),
-				State:     TCPStatuses[2],
-			}
-			stats = append(stats, ns)
-
-			index += step
+		if err != windows.ERROR_INSUFFICIENT_BUFFER {
+			return nil, err
 		}
-		return stats, nil
+		buf = make([]byte, size)
 	}
 
-	return nil, fmt.Errorf("allocating memory error, %v", ret)
+	if int(pmibtable2.DwNumEntries) == 0 {
+		return nil, nil
+	}
+
+	stats := make([]NetStat, 0)
+	index := int(unsafe.Sizeof(pmibtable2.DwNumEntries))
+	step := int(unsafe.Sizeof(pmibtable2.Table))
+
+	// udp no state, so set default state LISTEN
+	for i := 0; i < int(pmibtable2.DwNumEntries); i++ {
+		mibs := (*MIB_UDPROW_OWNER_PID)(unsafe.Pointer(&buf[index]))
+
+		ns := NetStat{
+			LocalAddr: parseIPv4(mibs.DwLocalAddr),
+			LocalPort: decodePort(mibs.DwLocalPort),
+			OwningPid: int(mibs.DwOwningPid),
+			State:     TCPStatuses[2],
+		}
+		stats = append(stats, ns)
+
+		index += step
+	}
+	return stats, nil
+
 }
 
 func getUDP6Stat() ([]NetStat, error) {
-	var pmibtable2 PMIB_UDP6TABLE_OWNER_PID
-	var mibtable2 MIB_UDP6TABLE_OWNER_PID
-
-	size := unsafe.Sizeof(mibtable2)
-	pmibtable2 = &mibtable2
-
-	// first call to GetExtendedUdpTable to get the necessary size into the size variable
-	ret := win.GetExtendedUdpTable(
-		uintptr(unsafe.Pointer(pmibtable2)),
-		(*win.DWORD)(unsafe.Pointer(&size)),
-		true,
-		win.AF_INET6,
-		win.UDP_TABLE_OWNER_PID,
-		0,
+	var (
+		pmibtable2 PMIB_UDP6TABLE_OWNER_PID
+		buf        []byte
+		size       uint32
 	)
-	if ret == ErrInsufficientBuffer {
-		buf := make([]byte, size)
-		pmibtable2 = (*MIB_UDP6TABLE_OWNER_PID)(unsafe.Pointer(&buf[0]))
 
-		// second call to GetExtendedUdpTable to get the actual data we require
-		dwRet := win.GetExtendedUdpTable(
+	for {
+		if len(buf) > 0 {
+			pmibtable2 = (*MIB_UDP6TABLE_OWNER_PID)(unsafe.Pointer(&buf[0]))
+		}
+		err := GetExtendedUdpTable(
 			uintptr(unsafe.Pointer(pmibtable2)),
-			(*win.DWORD)(unsafe.Pointer(&size)),
+			(*uint32)(unsafe.Pointer(&size)),
 			true,
 			syscall.AF_INET6,
-			win.UDP_TABLE_OWNER_PID,
+			UDP_TABLE_OWNER_PID,
 			0,
 		)
-		if int(dwRet) != 0 {
-			return nil, fmt.Errorf("run GetExtendedUdp6Table error")
+		if err == nil {
+			break
 		}
-
-		stats := make([]NetStat, 0)
-		index := int(unsafe.Sizeof(pmibtable2.DwNumEntries))
-		step := int(unsafe.Sizeof(pmibtable2.Table))
-		// udp no state, so set default state LISTEN
-		for i := 0; i < int(pmibtable2.DwNumEntries); i++ {
-
-			mibs := (*MIB_UDP6ROW_OWNER_PID)(unsafe.Pointer(&buf[index]))
-			ns := NetStat{
-				LocalAddr: parseIPv6(mibs.UcLocalAddr),
-				LocalPort: decodePort(mibs.DwLocalPort),
-				OwningPid: int(mibs.DwOwningPid),
-				State:     TCPStatuses[2],
-			}
-			stats = append(stats, ns)
-
-			index += step
+		if err != windows.ERROR_INSUFFICIENT_BUFFER {
+			return nil, err
 		}
-		return stats, nil
+		buf = make([]byte, size)
 	}
 
-	return nil, fmt.Errorf("allocating memory error, %v", ret)
+	if int(pmibtable2.DwNumEntries) == 0 {
+		return nil, nil
+	}
+
+	stats := make([]NetStat, 0)
+	index := int(unsafe.Sizeof(pmibtable2.DwNumEntries))
+	step := int(unsafe.Sizeof(pmibtable2.Table))
+	// udp no state, so set default state LISTEN
+	for i := 0; i < int(pmibtable2.DwNumEntries); i++ {
+
+		mibs := (*MIB_UDP6ROW_OWNER_PID)(unsafe.Pointer(&buf[index]))
+		ns := NetStat{
+			LocalAddr: parseIPv6(mibs.UcLocalAddr),
+			LocalPort: decodePort(mibs.DwLocalPort),
+			OwningPid: int(mibs.DwOwningPid),
+			State:     TCPStatuses[2],
+		}
+		stats = append(stats, ns)
+
+		index += step
+	}
+	return stats, nil
 }
